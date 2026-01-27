@@ -16,11 +16,6 @@ from sqlalchemy import select
 # For SQLite (development):
 DATABASE_URL = "sqlite+aiosqlite:///store.db"
 
-# For PostgreSQL (production):
-# DATABASE_URL = "postgresql+asyncpg://user:password@localhost/dbname"
-
-# For MySQL (production):
-# DATABASE_URL = "mysql+aiomysql://user:password@localhost/dbname"
 
 # Create async engine
 engine = create_async_engine(DATABASE_URL, echo=False)
@@ -298,3 +293,6 @@ async def add_sample_data(session: AsyncSession):
     session.add_all(products)
     await session.commit()
     print("Sample data added successfully!")
+
+
+
