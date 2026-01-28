@@ -1,86 +1,91 @@
 """
-User registration and onboarding handlers
-File: handlers/registration.py
+Admin order management handlers
+File: handlers/admin.py
 """
 
-from aiogram import Router, F
-from aiogram.filters import CommandStart, Command
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
-from aiogram.fsm.context import FSMContext
+import logging
+from aiogram import Router, F, Bot
+from aiogram.types import CallbackQuery
 
-from database import User
-from states import OrderStates
+from config import ADMIN_IDS, BOT_TOKEN
+from database import Order, OrderItem, get_db
 
 router = Router()
+bot = Bot(token=BOT_TOKEN)
 
 
-@router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext):
-    """Handle /start command"""
-    user = User.get_by_telegram_id(message.from_user.id)
+@router.callback_query(F.data.startswith("confirm_order_"))
+async def confirm_order(callback: CallbackQuery):
+    """Admin confirms order"""
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("Unauthorized", show_alert=True)
+        return
     
-    if user and user.get('phone_number'):
-        await message.answer(
-            f"Welcome back, {user['first_name']}! 👋\n\n"
-            "Use /order to start shopping\n"
-            "Use /cart to view your cart\n"
-            "Use /help for more commands"
-        )
-    else:
-        # Request phone number
-        keyboard = ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text="📱 Share Phone Number", request_contact=True)]],
-            resize_keyboard=True,
-            one_time_keyboard=True
-        )
-        await message.answer(
-            "Welcome to our store! 🛍️\n\n"
-            "To get started, please share your phone number:",
-            reply_markup=keyboard
-        )
-        await state.set_state(OrderStates.waiting_for_phone)
-
-
-@router.message(OrderStates.waiting_for_phone, F.contact)
-async def process_phone_number(message: Message, state: FSMContext):
-    """Process shared phone number"""
-    contact = message.contact
+    order_id = int(callback.data.split("_")[-1])
     
-    user = User.get_by_telegram_id(message.from_user.id)
+    with get_db() as session:
+        order = Order.get_by_id(session, order_id)
+        
+        if not order:
+            await callback.answer("Order not found", show_alert=True)
+            return
+        
+        order.status = "confirmed"
+        
+        # Notify customer
+        try:
+            await bot.send_message(
+                order.user.telegram_id,
+                f"✅ Your order #{order_id} has been confirmed!\n"
+                "We're preparing your delivery."
+            )
+        except Exception as e:
+            logging.error(f"Failed to notify customer: {e}")
     
-    if user:
-        User.update_phone(
-            message.from_user.id,
-            contact.phone_number,
-            message.from_user.first_name or "",
-            message.from_user.last_name or "",
-            message.from_user.username or ""
-        )
-    else:
-        User.create(
-            message.from_user.id,
-            contact.phone_number,
-            message.from_user.first_name or "",
-            message.from_user.last_name or "",
-            message.from_user.username or ""
-        )
-    
-    await message.answer(
-        "Great! Your phone number has been saved. ✅\n\n"
-        "Use /order to start shopping!",
-        reply_markup=ReplyKeyboardRemove()
+    await callback.message.edit_text(
+        callback.message.text + "\n\n✅ CONFIRMED",
+        reply_markup=None
     )
-    await state.clear()
+    
+    await callback.answer("Order confirmed!")
 
 
-@router.message(Command("help"))
-async def cmd_help(message: Message):
-    """Show help message"""
-    help_text = (
-        "🤖 Bot Commands:\n\n"
-        "/start - Register or restart\n"
-        "/order - Browse products\n"
-        "/cart - View your cart\n"
-        "/help - Show this message"
+@router.callback_query(F.data.startswith("cancel_order_"))
+async def cancel_order(callback: CallbackQuery):
+    """Admin cancels order"""
+    if callback.from_user.id not in ADMIN_IDS:
+        await callback.answer("Unauthorized", show_alert=True)
+        return
+    
+    order_id = int(callback.data.split("_")[-1])
+    
+    with get_db() as session:
+        order = Order.get_by_id(session, order_id)
+        
+        if not order:
+            await callback.answer("Order not found", show_alert=True)
+            return
+        
+        order.status = "cancelled"
+        
+        # Restore stock
+        order_items = OrderItem.get_by_order(session, order_id)
+        for item in order_items:
+            item.variant.stock += item.quantity
+        
+        # Notify customer
+        try:
+            await bot.send_message(
+                order.user.telegram_id,
+                f"❌ Your order #{order_id} has been cancelled.\n"
+                "Please contact support if you have questions."
+            )
+        except Exception as e:
+            logging.error(f"Failed to notify customer: {e}")
+    
+    await callback.message.edit_text(
+        callback.message.text + "\n\n❌ CANCELLED",
+        reply_markup=None
     )
-    await message.answer(help_text)
+    
+    await callback.answer("Order cancelled!")

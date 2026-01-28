@@ -2,7 +2,6 @@
 Inline keyboard layouts for the Telegram bot
 File: keyboards.py
 """
-from database import Product, get_session
 
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from typing import List
@@ -23,23 +22,22 @@ def get_categories_keyboard(categories) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def get_products_keyboard(products, category_id: int) -> InlineKeyboardMarkup:
-    """Create inline keyboard with products"""
+def get_subcategories_keyboard(subcategories, category_id: int) -> InlineKeyboardMarkup:
+    """Create inline keyboard with subcategories"""
     buttons = []
     
-    for product in products:
-        stock_text = f" ({product.stock} ta qoldi)" if product.stock < 10 else ""
+    for subcat in subcategories:
         buttons.append([
             InlineKeyboardButton(
-                text=f"🛍️ {product.name} - ${product.price:.2f}{stock_text}",
-                callback_data=f"product_{product.id}"
+                text=f"📂 {subcat.name}",
+                callback_data=f"subcategory_{subcat.id}"
             )
         ])
     
     # Add back button
     buttons.append([
         InlineKeyboardButton(
-            text="⬅️ Bo'limlarga qaytish",
+            text="⬅️ Back to Categories",
             callback_data="back_to_categories"
         )
     ])
@@ -47,28 +45,104 @@ def get_products_keyboard(products, category_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-async def get_product_keyboard(product_id: int) -> InlineKeyboardMarkup:
-    """Create inline keyboard for a single product"""
-    # Get category_id from the product (you might need to pass this)
-    async with get_session() as session:
-        product = await Product.get_by_id(session, product_id)
+def get_products_keyboard(products, subcategory_id: int) -> InlineKeyboardMarkup:
+    """Create inline keyboard with products"""
+    buttons = []
+    
+    for product in products:
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"🛍️ {product.name}",
+                callback_data=f"product_{product.id}"
+            )
+        ])
+    
+    # Add back button
+    buttons.append([
+        InlineKeyboardButton(
+            text="⬅️ Back to Subcategories",
+            callback_data=f"back_to_subcategories_{subcategory_id}"
+        )
+    ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_product_variants_keyboard(variants, product_id: int, num_images: int) -> InlineKeyboardMarkup:
+    """Create inline keyboard with numbered image buttons and variant selection"""
+    buttons = []
+    
+    # Add numbered buttons for images (if there are multiple images)
+    if num_images > 1:
+        image_buttons = []
+        for i in range(num_images):
+            image_buttons.append(
+                InlineKeyboardButton(
+                    text=f"{i + 1}",
+                    callback_data=f"view_image_{product_id}_{i}"
+                )
+            )
+        
+        # Split into rows of 5 buttons each
+        for i in range(0, len(image_buttons), 5):
+            buttons.append(image_buttons[i:i+5])
+    
+    # Add separator
+    if num_images > 1:
+        buttons.append([
+            InlineKeyboardButton(
+                text="━━━━━ Select Variant ━━━━━",
+                callback_data="separator"
+            )
+        ])
+    
+    # Add variant buttons
+    for variant in variants:
+        stock_text = f" ({variant.stock} left)" if variant.stock < 10 else ""
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"✨ {variant.variant_name} - ${variant.price:.2f}{stock_text}",
+                callback_data=f"variant_{variant.id}"
+            )
+        ])
+    
+    # Add cart and back buttons
+    buttons.append([
+        InlineKeyboardButton(
+            text="🛒 View Cart",
+            callback_data="view_cart"
+        )
+    ])
+    
+    buttons.append([
+        InlineKeyboardButton(
+            text="⬅️ Back to Products",
+            callback_data=f"back_to_products_{product_id}"
+        )
+    ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_variant_confirmation_keyboard(variant_id: int, product_id: int) -> InlineKeyboardMarkup:
+    """Create keyboard for variant confirmation"""
     buttons = [
         [
             InlineKeyboardButton(
-                text="➕ Savatga qo'shish",
-                callback_data=f"add_to_cart_{product_id}"
+                text="➕ Add to Cart",
+                callback_data=f"add_to_cart_{variant_id}"
             )
         ],
         [
             InlineKeyboardButton(
-                text="🛒 Savatni ko'rish",
+                text="🛒 View Cart",
                 callback_data="view_cart"
             )
         ],
         [
             InlineKeyboardButton(
-                text="⬅️ Mahsulotlarga qaytish",
-                callback_data=f"back_to_products_{product.category_id}"  # Will be updated dynamically
+                text="⬅️ Back to Product",
+                callback_data=f"product_{product_id}"
             )
         ]
     ]
@@ -81,13 +155,13 @@ def get_cart_keyboard() -> InlineKeyboardMarkup:
     buttons = [
         [
             InlineKeyboardButton(
-                text="✅ Tekshirish",
+                text="✅ Checkout",
                 callback_data="checkout"
             )
         ],
         [
             InlineKeyboardButton(
-                text="🛍️ Sotib olishni davom ettirish",
+                text="🛍️ Continue Shopping",
                 callback_data="back_to_categories"
             )
         ]
@@ -101,73 +175,16 @@ def get_admin_order_keyboard(order_id: int) -> InlineKeyboardMarkup:
     buttons = [
         [
             InlineKeyboardButton(
-                text="✅ Tasdiqlash",
+                text="✅ Confirm Order",
                 callback_data=f"confirm_order_{order_id}"
             )
         ],
         [
             InlineKeyboardButton(
-                text="❌ Bekor qilish",
+                text="❌ Cancel Order",
                 callback_data=f"cancel_order_{order_id}"
             )
         ]
     ]
     
     return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-
-# from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-# from db.session import Session
-# from db.models import Category, Product
-
-
-# def categories_keyboard():
-#     session = Session()
-#     categories = session.query(Category).all()
-#     session.close()
-
-#     kb = []
-#     for category in categories:
-#         kb.append([InlineKeyboardButton(text=f"{category.name}", callback_data=f"cat_{category.id}")])
-
-#     kb.append([InlineKeyboardButton(text="Savatni ko'rish", callback_data="see_cart")])
-#     return InlineKeyboardMarkup(inline_keyboard=kb)
-
-# def products_keyboard(category_id):
-#     session = Session()
-#     products = session.query(Product).filter(Product.category_id == category_id).all()
-#     session.close()
-
-#     kb = []
-#     for item in products:
-#         kb.append([InlineKeyboardButton(text=f"{item.name}", callback_data=f"prod_{item.id}")])
-        
-#     kb.append([InlineKeyboardButton(text="🔙 Back", callback_data="back_to_categories")])
-#     return InlineKeyboardMarkup(inline_keyboard=kb)
-
-
-# def order_confirmation_kb():
-#     return InlineKeyboardMarkup(
-#             inline_keyboard=[
-#                 [
-#                     InlineKeyboardButton(text="Tasdiqlash ✅", callback_data=f"send_order")
-#                 ],
-#                 [
-#                     InlineKeyboardButton(text="Bekor qilish ❌", callback_data="cancel"),
-#                     InlineKeyboardButton(text="🔙 Back", callback_data="back_to_categories")
-#                 ]
-#             ]
-#         )
-
-# def add_to_cart_kb():
-#     return InlineKeyboardMarkup(
-#         inline_keyboard=[
-#             [
-#                 InlineKeyboardButton(text="➕", callback_data=f"addtocart_{category}_{product_id}")
-#             ],
-#             [
-#                 InlineKeyboardButton(text="🔙 Back", callback_data=f"back_to_products_{category}")
-#             ]
-#         ]
-#     )
