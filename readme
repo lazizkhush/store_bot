@@ -1,0 +1,1060 @@
+# Telegram E-Commerce Store Bot
+
+A full-featured e-commerce bot for Telegram built with aiogram 3.x and SQLAlchemy ORM. This bot allows users to browse products, add items to cart, and place orders with location-based delivery.
+
+---
+
+## Table of Contents
+
+1. [Project Overview](#project-overview)
+2. [Architecture](#architecture)
+3. [Database Schema](#database-schema)
+4. [Project Structure](#project-structure)
+5. [Installation & Setup](#installation--setup)
+6. [User Flow](#user-flow)
+7. [Admin Flow](#admin-flow)
+8. [Key Features](#key-features)
+9. [Technical Implementation](#technical-implementation)
+10. [Adding Products & Images](#adding-products--images)
+11. [Configuration](#configuration)
+12. [Deployment](#deployment)
+13. [Troubleshooting](#troubleshooting)
+
+---
+
+## Project Overview
+
+### What This Bot Does
+
+This is a complete e-commerce solution for Telegram that enables:
+- **Users**: Browse products by category → subcategory → product, view multiple product images, select variants (sizes/colors), add to cart, checkout with location sharing
+- **Admins**: Receive order notifications, confirm/cancel orders, automatic stock management
+
+### Technology Stack
+
+- **Bot Framework**: aiogram 3.0.0 (async Telegram bot framework)
+- **ORM**: SQLAlchemy 2.0.23 (database abstraction layer)
+- **Database**: SQLite (development) / PostgreSQL or MySQL (production)
+- **State Management**: FSM (Finite State Machine) for user workflows
+- **Python Version**: 3.10+
+
+---
+
+## Architecture
+
+### High-Level Architecture
+
+```
+User (Telegram) 
+    ↓
+Telegram Bot API
+    ↓
+aiogram Framework
+    ↓
+Handler Modules (registration, shopping, cart, checkout, admin)
+    ↓
+SQLAlchemy ORM
+    ↓
+Database (SQLite/PostgreSQL/MySQL)
+```
+
+### Design Patterns Used
+
+1. **MVC Pattern**: Models (database.py), Views (Telegram messages), Controllers (handlers)
+2. **Repository Pattern**: Static methods in models for data access
+3. **FSM Pattern**: State management for user workflows
+4. **Context Manager Pattern**: Database session handling with `get_db()`
+5. **Modular Architecture**: Separated handlers for different concerns
+
+---
+
+## Database Schema
+
+### Entity-Relationship Diagram
+
+```
+Users (1) ──────< Orders (many)
+  │                  │
+  └──< Cart          └──< OrderItems >──┐
+                                        │
+Categories (1) ──< Subcategories (many) │
+                        │                │
+                        └──< Products (many)
+                              │
+                              ├──< ProductVariants (many) <─┘
+                              │
+                              └──< ProductImages (many)
+```
+
+### Tables Explained
+
+#### 1. **users**
+Stores user information from Telegram.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | Integer (PK) | Auto-increment primary key |
+| telegram_id | BigInteger (Unique) | User's Telegram ID |
+| phone_number | String(20) | User's phone number |
+| first_name | String(100) | First name from Telegram |
+| last_name | String(100) | Last name from Telegram |
+| username | String(100) | Telegram username |
+| created_at | DateTime | Registration timestamp |
+
+**Relationships**: 
+- One-to-Many with `orders`
+- One-to-Many with `cart`
+
+#### 2. **categories**
+Main product categories (e.g., Electronics, Clothing).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | Integer (PK) | Auto-increment primary key |
+| name | String(100) (Unique) | Category name |
+| description | Text | Category description |
+| is_active | Boolean | Active/inactive flag |
+| created_at | DateTime | Creation timestamp |
+
+**Relationships**: 
+- One-to-Many with `subcategories`
+
+#### 3. **subcategories**
+Subcategories under main categories (e.g., Smartphones under Electronics).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | Integer (PK) | Auto-increment primary key |
+| category_id | Integer (FK) | Reference to categories.id |
+| name | String(100) | Subcategory name |
+| description | Text | Subcategory description |
+| is_active | Boolean | Active/inactive flag |
+| created_at | DateTime | Creation timestamp |
+
+**Relationships**: 
+- Many-to-One with `category`
+- One-to-Many with `products`
+
+#### 4. **products**
+Actual products (e.g., iPhone 15, Samsung Galaxy S24).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | Integer (PK) | Auto-increment primary key |
+| subcategory_id | Integer (FK) | Reference to subcategories.id |
+| name | String(200) | Product name |
+| description | Text | Product description |
+| is_active | Boolean | Active/inactive flag |
+| created_at | DateTime | Creation timestamp |
+
+**Relationships**: 
+- Many-to-One with `subcategory`
+- One-to-Many with `variants`
+- One-to-Many with `images`
+
+#### 5. **product_variants**
+Different variants of a product (e.g., 128GB, 256GB, 512GB).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | Integer (PK) | Auto-increment primary key |
+| product_id | Integer (FK) | Reference to products.id |
+| variant_name | String(100) | Variant name (e.g., "128GB", "Large", "Red") |
+| price | Float | Price for this variant |
+| stock | Integer | Available quantity |
+| is_active | Boolean | Active/inactive flag |
+| created_at | DateTime | Creation timestamp |
+
+**Relationships**: 
+- Many-to-One with `product`
+- One-to-Many with `cart`
+- One-to-Many with `order_items`
+
+**Why Variants?** 
+Products can have multiple options (sizes, colors, storage). Each variant has its own price and stock.
+
+#### 6. **product_images**
+Multiple images per product with ordering.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | Integer (PK) | Auto-increment primary key |
+| product_id | Integer (FK) | Reference to products.id |
+| file_id | String(200) | Telegram file_id for the image |
+| position | Integer | Display order (0 = first image) |
+| created_at | DateTime | Creation timestamp |
+
+**Relationships**: 
+- Many-to-One with `product`
+
+**Note**: Images are not stored in database. We store Telegram's `file_id` which is a reference to the image on Telegram's servers.
+
+#### 7. **cart**
+User's shopping cart (temporary storage before checkout).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | Integer (PK) | Auto-increment primary key |
+| user_id | Integer (FK) | Reference to users.id |
+| variant_id | Integer (FK) | Reference to product_variants.id |
+| quantity | Integer | Number of items |
+| added_at | DateTime | When item was added |
+
+**Relationships**: 
+- Many-to-One with `user`
+- Many-to-One with `variant`
+
+**Unique Constraint**: (user_id, variant_id) - User can't have duplicate variants in cart
+
+#### 8. **orders**
+Placed orders from users.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | Integer (PK) | Auto-increment primary key |
+| user_id | Integer (FK) | Reference to users.id |
+| total_price | Float | Total order amount |
+| status | String(20) | Order status (pending/confirmed/cancelled/delivered) |
+| delivery_latitude | Float | Delivery location latitude |
+| delivery_longitude | Float | Delivery location longitude |
+| created_at | DateTime | Order creation time |
+| updated_at | DateTime | Last update time |
+
+**Relationships**: 
+- Many-to-One with `user`
+- One-to-Many with `items`
+
+#### 9. **order_items**
+Items within an order (snapshot at time of order).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | Integer (PK) | Auto-increment primary key |
+| order_id | Integer (FK) | Reference to orders.id |
+| variant_id | Integer (FK) | Reference to product_variants.id |
+| quantity | Integer | Quantity ordered |
+| price | Float | Price at time of order (snapshot) |
+| product_name | String(200) | Product name (snapshot) |
+| variant_name | String(100) | Variant name (snapshot) |
+
+**Relationships**: 
+- Many-to-One with `order`
+- Many-to-One with `variant`
+
+**Why Snapshots?** 
+Product names and prices might change. We store them at order time for historical accuracy.
+
+---
+
+## Project Structure
+
+```
+telegram_store_bot/
+│
+├── main.py                      # Entry point - initializes and starts bot
+├── config.py                    # Configuration (tokens, IDs, database path)
+├── database.py                  # SQLAlchemy models and database operations
+├── keyboards.py                 # Inline keyboard layouts (UI buttons)
+├── states.py                    # FSM states for user workflows
+├── add_products.py              # Admin CLI tool to add products
+│
+├── handlers/                    # Handler modules (separated by function)
+│   ├── __init__.py             # Package initializer
+│   ├── registration.py         # User registration (/start, phone number)
+│   ├── shopping.py             # Product browsing (categories → products)
+│   ├── cart.py                 # Shopping cart management
+│   ├── checkout.py             # Order placement and location sharing
+│   └── admin.py                # Admin order management
+│
+├── requirements.txt            # Python dependencies
+└── store.db                    # SQLite database (auto-created)
+```
+
+### File Responsibilities
+
+#### **main.py**
+- Initializes bot and dispatcher
+- Registers all handler routers
+- Starts polling for messages
+- Entry point of application
+
+#### **config.py**
+- Centralized configuration
+- Bot token, admin IDs, database path
+- Easy to switch to environment variables
+
+#### **database.py**
+- All SQLAlchemy ORM models
+- Database connection management
+- CRUD operations as static methods
+- Sample data generation
+- Session context manager
+
+#### **keyboards.py**
+- All inline keyboard layouts
+- Button creation functions
+- Separates UI logic from business logic
+
+#### **states.py**
+- FSM state definitions
+- User workflow states
+- Used by handlers for state transitions
+
+#### **handlers/registration.py**
+- Handles `/start` command
+- Phone number collection
+- User creation/update
+- `/help` command
+
+#### **handlers/shopping.py**
+- `/order` command - show categories
+- Category browsing
+- Subcategory browsing
+- Product viewing with images
+- Image navigation (numbered buttons)
+- Variant selection
+- Add to cart functionality
+- Navigation (back buttons)
+
+#### **handlers/cart.py**
+- `/cart` command - view cart
+- Display cart contents with totals
+- Calculate prices
+
+#### **handlers/checkout.py**
+- Checkout initiation
+- Location sharing
+- Order creation
+- Stock reduction
+- Cart clearing
+- Admin notifications
+
+#### **handlers/admin.py**
+- Order confirmation (admin only)
+- Order cancellation (admin only)
+- Stock restoration on cancel
+- Customer notifications
+
+#### **add_products.py**
+- CLI tool for admins
+- Interactive product addition
+- Bulk product import
+- Image management
+
+---
+
+## Installation & Setup
+
+### Prerequisites
+
+- Python 3.10 or higher
+- Telegram account
+- Telegram Bot Token (from @BotFather)
+- Your Telegram User ID (from @userinfobot)
+
+### Step-by-Step Installation
+
+#### 1. Install Dependencies
+
+```bash
+pip install aiogram==3.0.0 sqlalchemy==2.0.23
+```
+
+#### 2. Get Bot Token
+
+1. Open Telegram
+2. Search for `@BotFather`
+3. Send `/newbot`
+4. Follow instructions to create bot
+5. Copy the bot token (looks like: `1234567890:ABCdefGHIjklMNOpqrsTUVwxyz`)
+
+#### 3. Get Your Telegram User ID
+
+1. Search for `@userinfobot` in Telegram
+2. Send `/start`
+3. Copy your User ID (a number like: `123456789`)
+
+#### 4. Configure the Bot
+
+Edit `config.py`:
+
+```python
+BOT_TOKEN = "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"  # Your bot token
+ADMIN_IDS = [123456789]  # Your Telegram user ID
+DATABASE_FILE = "store.db"
+```
+
+#### 5. Run the Bot
+
+```bash
+python main.py
+```
+
+Output should show:
+```
+Database initialized
+Sample data with subcategories and variants added successfully!
+Starting bot...
+```
+
+#### 6. Test the Bot
+
+1. Open Telegram
+2. Find your bot by username
+3. Send `/start`
+4. Follow the registration flow
+
+---
+
+## User Flow
+
+### Complete User Journey
+
+```
+1. User sends /start to bot
+   ↓
+2. Bot requests phone number
+   ↓
+3. User shares phone number (via button)
+   ↓
+4. Bot saves user to database
+   ↓
+5. User sends /order
+   ↓
+6. Bot shows categories (e.g., Electronics, Clothing, Food)
+   ↓
+7. User selects category (e.g., Electronics)
+   ↓
+8. Bot shows subcategories (e.g., Smartphones, Laptops)
+   ↓
+9. User selects subcategory (e.g., Smartphones)
+   ↓
+10. Bot shows products (e.g., iPhone 15, Samsung Galaxy S24)
+    ↓
+11. User selects product (e.g., iPhone 15)
+    ↓
+12. Bot shows product details with images
+    - Product name and description
+    - Multiple images (if available)
+    - Numbered buttons to view images [1] [2] [3]
+    - Available variants (128GB, 256GB, 512GB)
+    ↓
+13. User can click numbered buttons to view different images
+    ↓
+14. User selects variant (e.g., 256GB - $1099.99)
+    ↓
+15. Bot shows variant details with "Add to Cart" button
+    ↓
+16. User clicks "Add to Cart"
+    ↓
+17. Bot confirms addition, user can:
+    - Continue shopping
+    - View cart
+    ↓
+18. User sends /cart or clicks "View Cart"
+    ↓
+19. Bot shows cart contents:
+    • iPhone 15 (256GB)
+      $1099.99 x 1 = $1099.99
+    
+    💰 Total: $1099.99
+    
+    [✅ Checkout] [🛍️ Continue Shopping]
+    ↓
+20. User clicks "Checkout"
+    ↓
+21. Bot requests location
+    ↓
+22. User shares location (via button)
+    ↓
+23. Bot creates order:
+    - Deducts from stock
+    - Clears cart
+    - Notifies user
+    - Notifies admins
+    ↓
+24. Admin confirms or cancels order
+    ↓
+25. User receives confirmation/cancellation notification
+```
+
+### State Transitions (FSM)
+
+```
+OrderStates.waiting_for_phone
+    → (phone shared) → OrderStates cleared
+    
+OrderStates.browsing_categories
+    → (category selected) → OrderStates.browsing_subcategories
+    
+OrderStates.browsing_subcategories
+    → (subcategory selected) → OrderStates.browsing_products
+    
+OrderStates.browsing_products
+    → (product selected) → OrderStates.viewing_product
+    
+OrderStates.viewing_product
+    → (variant selected) → OrderStates.selecting_variant
+    
+OrderStates.selecting_variant
+    → (add to cart) → (stays in selecting_variant)
+    
+OrderStates.in_cart
+    → (checkout) → OrderStates.waiting_for_location
+    
+OrderStates.waiting_for_location
+    → (location shared) → OrderStates cleared (order created)
+```
+
+---
+
+## Admin Flow
+
+### Admin Order Management
+
+```
+1. User places order
+   ↓
+2. Admin receives notification:
+   
+   🆕 NEW ORDER #42
+   
+   👤 Customer: John Doe
+   📱 Phone: +1234567890
+   💰 Total: $1099.99
+   
+   📦 Items:
+   • iPhone 15 (256GB) x1 - $1099.99
+   
+   [✅ Confirm Order] [❌ Cancel Order]
+   
+   ↓
+3. Admin also receives location pin
+   ↓
+4. Admin clicks "Confirm Order"
+   ↓
+5. Bot:
+   - Updates order status to "confirmed"
+   - Notifies customer: "✅ Your order #42 has been confirmed!"
+   - Updates admin message: "✅ CONFIRMED"
+```
+
+### Admin Actions
+
+**Confirm Order:**
+- Sets order status to "confirmed"
+- Sends confirmation message to customer
+- Stock remains deducted
+
+**Cancel Order:**
+- Sets order status to "cancelled"
+- Restores stock (adds back quantities)
+- Sends cancellation message to customer
+
+---
+
+## Key Features
+
+### 1. Hierarchical Product Organization
+
+**Structure**: Category → Subcategory → Product → Variants
+
+**Example**:
+```
+Electronics (Category)
+  ├── Smartphones (Subcategory)
+  │     ├── iPhone 15 (Product)
+  │     │     ├── 128GB - $999 (Variant)
+  │     │     ├── 256GB - $1099 (Variant)
+  │     │     └── 512GB - $1299 (Variant)
+  │     └── Samsung Galaxy S24 (Product)
+  │           ├── 256GB - $899 (Variant)
+  │           └── 512GB - $999 (Variant)
+  └── Laptops (Subcategory)
+        └── MacBook Pro (Product)
+              ├── 13-inch M3 - $1599 (Variant)
+              ├── 14-inch M3 Pro - $1999 (Variant)
+              └── 16-inch M3 Max - $2499 (Variant)
+```
+
+**Why This Structure?**
+- **Scalability**: Easy to add new categories/subcategories
+- **Navigation**: Users can drill down to find products
+- **Organization**: Products grouped logically
+- **Flexibility**: Same product can have many variants
+
+### 2. Product Variants System
+
+**What are Variants?**
+Different versions of the same product with different attributes (size, color, storage, etc.) and potentially different prices/stock.
+
+**Benefits**:
+- One product, multiple options
+- Independent pricing per variant
+- Separate stock tracking
+- Clear price differentiation
+
+**Example Use Cases**:
+- Clothing: Small, Medium, Large, X-Large
+- Phones: 128GB, 256GB, 512GB, 1TB
+- Products with colors: Red, Blue, Black, White
+- Products with materials: Cotton, Polyester, Silk
+
+### 3. Multiple Product Images
+
+**How It Works**:
+1. Each product can have multiple images
+2. Images stored by position (0, 1, 2, ...)
+3. First image (position 0) shown by default
+4. Numbered buttons appear if multiple images exist
+5. Users click numbers to view different images
+6. Image changes without losing product context
+
+**UI Example**:
+```
+┌─────────────────────────┐
+│   [Product Image 1]     │
+│                         │
+│   iPhone 15             │
+│   Latest iPhone model   │
+│                         │
+│   📸 3 images available │
+│   [1] [2] [3] ←────────── Click to view
+│                         │
+│   ━━ Select Variant ━━  │
+│   [128GB - $999]        │
+│   [256GB - $1099]       │
+│   [512GB - $1299]       │
+└─────────────────────────┘
+```
+
+**Technical Implementation**:
+- Images not stored in database
+- Telegram `file_id` stored instead
+- Telegram hosts the actual images
+- `file_id` is permanent for your bot
+- Images fetched via Telegram Bot API
+
+### 4. Smart Shopping Cart
+
+**Features**:
+- Add multiple variants of different products
+- Quantity tracking per variant
+- Real-time total calculation
+- Stock validation (can't add more than available)
+- Prevents duplicate entries (updates quantity instead)
+- Persists until checkout or manual clearing
+
+**Example Cart Display**:
+```
+🛒 Your Cart:
+
+• iPhone 15 (256GB)
+  $1099.99 x 2 = $2199.98
+
+• Cotton T-Shirt (Large)
+  $19.99 x 3 = $59.97
+
+💰 Total: $2259.95
+```
+
+### 5. Location-Based Delivery
+
+**How It Works**:
+1. User clicks "Checkout"
+2. Bot requests location
+3. User shares live location via Telegram button
+4. Bot captures latitude/longitude
+5. Coordinates stored with order
+6. Admin receives location pin
+
+**Why GPS Coordinates?**
+- Precise delivery location
+- No address typing errors
+- Works worldwide
+- Can be opened in maps
+- Visual confirmation for admin
+
+### 6. Real-Time Stock Management
+
+**Automatic Stock Updates**:
+- Stock decreases when order placed
+- Stock increases when order cancelled
+- Validates stock before adding to cart
+- Shows low stock warnings (< 10 items)
+- Prevents overselling
+
+**Flow**:
+```
+Product: iPhone 15 (256GB)
+Initial Stock: 10
+
+User adds to cart → Stock: 10 (unchanged, just reserved in cart)
+User checks out → Stock: 9 (deducted from inventory)
+Admin cancels → Stock: 10 (restored)
+```
+
+### 7. Admin Notifications
+
+**What Admins Receive**:
+1. **Order Details Message**:
+   - Order ID
+   - Customer info (name, phone)
+   - Total price
+   - List of items with quantities
+   - Action buttons (Confirm/Cancel)
+
+2. **Location Pin**:
+   - Delivery location on map
+   - Can open in maps app
+   - Shows exact delivery point
+
+**Admin Actions**:
+- Confirm: Marks order as confirmed, notifies customer
+- Cancel: Cancels order, restores stock, notifies customer
+
+### 8. User-Friendly Navigation
+
+**Back Buttons at Every Level**:
+- Categories ← Back to main menu
+- Subcategories ← Back to categories
+- Products ← Back to subcategories
+- Product details ← Back to products
+- Cart ← Continue shopping
+
+**Breadcrumb-Style Navigation**:
+Users always know where they are and can go back easily.
+
+### 9. FSM State Management
+
+**What is FSM?**
+Finite State Machine - manages user's current position in the workflow.
+
+**Why FSM?**
+- Remembers user context
+- Validates user actions
+- Prevents invalid state transitions
+- Enables complex multi-step workflows
+
+**Example**:
+User can't share location unless in checkout state. User can't add to cart unless viewing a product.
+
+### 10. Database Flexibility
+
+**Switch Databases Easily**:
+Change one line in `database.py`:
+
+```python
+# SQLite (development)
+DATABASE_URL = f"sqlite:///{DATABASE_FILE}"
+
+# PostgreSQL (production)
+DATABASE_URL = "postgresql://user:pass@host/db"
+
+# MySQL (production)
+DATABASE_URL = "mysql+pymysql://user:pass@host/db"
+```
+
+**SQLAlchemy Benefits**:
+- Database-agnostic code
+- Type safety with ORM
+- Automatic SQL generation
+- Relationship management
+- Query optimization
+
+---
+
+## Technical Implementation
+
+### ORM Models Explained
+
+#### User Model
+
+```python
+class User(Base):
+    __tablename__ = "users"
+    
+    # Columns
+    id: Mapped[int] = mapped_column(primary_key=True)
+    telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True)
+    phone_number: Mapped[Optional[str]]
+    first_name: Mapped[str]
+    
+    # Relationships
+    orders: Mapped[List["Order"]] = relationship(back_populates="user")
+    cart_items: Mapped[List["Cart"]] = relationship(back_populates="user")
+```
+
+**Explanation**:
+- `Mapped[int]`: Type-hinted columns for IDE support
+- `mapped_column()`: SQLAlchemy column definition
+- `relationship()`: Defines ORM relationships
+- `back_populates`: Bidirectional relationship
+
+**Usage**:
+```python
+with get_db() as session:
+    user = User.get_by_telegram_id(session, telegram_id)
+    
+    # Access related data
+    for order in user.orders:
+        print(order.total_price)
+    
+    for cart_item in user.cart_items:
+        print(cart_item.variant.product.name)
+```
+
+#### Product Model with Variants
+
+```python
+class Product(Base):
+    __tablename__ = "products"
+    
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+    description: Mapped[str]
+    
+    # Relationships
+    variants: Mapped[List["ProductVariant"]] = relationship(back_populates="product")
+    images: Mapped[List["ProductImage"]] = relationship(back_populates="product")
+```
+
+**Usage**:
+```python
+with get_db() as session:
+    product = Product.get_by_id(session, product_id)
+    
+    # Access variants
+    for variant in product.variants:
+        print(f"{variant.variant_name}: ${variant.price}")
+    
+    # Access images
+    for image in product.images:
+        print(image.file_id)
+```
+
+### Session Management
+
+**Context Manager Pattern**:
+
+```python
+@contextmanager
+def get_db():
+    session = SessionLocal()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+```
+
+**Usage**:
+```python
+with get_db() as session:
+    user = User.get_by_telegram_id(session, telegram_id)
+    user.phone_number = new_phone
+    # Automatically commits on exit
+    # Automatically rolls back on error
+    # Automatically closes session
+```
+
+### Handler Registration
+
+**In main.py**:
+
+```python
+from handlers import registration, shopping, cart, checkout, admin
+
+# Register routers in order
+dp.include_router(registration.router)
+dp.include_router(shopping.router)
+dp.include_router(cart.router)
+dp.include_router(checkout.router)
+dp.include_router(admin.router)
+```
+
+**Order Matters**: First registered router that matches handles the update.
+
+### Callback Query Handling
+
+**Pattern**: `callback_data` contains action and ID(s)
+
+**Examples**:
+```python
+# Category selection: "category_5"
+callback_data = f"category_{category.id}"
+
+# Product selection: "product_42"
+callback_data = f"product_{product.id}"
+
+# Image viewing: "view_image_42_2" (product_id=42, image_index=2)
+callback_data = f"view_image_{product.id}_{image_index}"
+```
+
+**Handler**:
+```python
+@router.callback_query(F.data.startswith("category_"))
+async def process_category_selection(callback: CallbackQuery, state: FSMContext):
+    category_id = int(callback.data.split("_")[1])
+    # ... handle category selection
+```
+
+### State Management
+
+**Setting State**:
+```python
+await state.set_state(OrderStates.browsing_categories)
+```
+
+**Storing Data**:
+```python
+await state.update_data(current_product=product_id)
+```
+
+**Retrieving Data**:
+```python
+data = await state.get_data()
+product_id = data.get('current_product')
+```
+
+**Clearing State**:
+```python
+await state.clear()
+```
+
+---
+
+## Adding Products & Images
+
+### Method 1: Interactive CLI Tool
+
+```bash
+python add_products.py
+```
+
+**Menu**:
+```
+==================================================
+STORE ADMIN TOOLS
+==================================================
+1. Add Category
+2. Add Subcategory
+3. Add Product (with variants)
+4. Add Images to Product
+5. List all categories
+6. Exit
+```
+
+**Workflow**:
+1. Add Category → "Furniture"
+2. Add Subcategory → "Living Room"
+3. Add Product → "Sofa", variants: "2-Seater $499", "3-Seater $699"
+4. Add Images → Get file_ids from bot, add multiple images
+
+### Method 2: Get Image file_id from Bot
+
+**Add temporary handler to main.py**:
+
+```python
+from aiogram import Router, F
+from aiogram.types import Message
+
+photo_router = Router()
+
+@photo_router.message(F.photo)
+async def get_photo_id(message: Message):
+    file_id = message.photo[-1].file_id
+    await message.answer(f"File ID:\n`{file_id}`", parse_mode="Markdown")
+
+# Register in main.py
+dp.include_router(photo_router)
+```
+
+**Steps**:
+1. Run bot
+2. Send photo to bot
+3. Bot replies with file_id
+4. Copy file_id
+5. Use in database:
+
+```python
+with get_db() as session:
+    ProductImage.create(session, product_id, "AgACAgIAAxkBAAIC...", 0)
+```
+
+### Method 3: Programmatic Addition
+
+**Example Script**:
+
+```python
+from database import (Category, Subcategory, Product, 
+                      ProductVariant, ProductImage, init_db, get_db)
+
+init_db()
+
+with get_db() as session:
+    # Create category
+    electronics = Category.create(session, "Electronics", "Electronic devices")
+    
+    # Create subcategory
+    phones = Subcategory.create(session, electronics.id, "Smartphones", "Mobile phones")
+    
+    # Create product
+    iphone = Product.create(session, phones.id, "iPhone 15", "Latest iPhone")
+    
+    # Create variants
+    ProductVariant.create(session, iphone.id, "128GB", 999.99, 10)
+    ProductVariant.create(session, iphone.id, "256GB", 1099.99, 8)
+    
+    # Add images (need file_ids from Telegram)
+    ProductImage.create(session, iphone.id, "AgACAgIAAxkBAAIC...", 0)
+    ProductImage.create(session, iphone.id, "AgACAgIAAxkBAAID...", 1)
+    ProductImage.create(session, iphone.id, "AgACAgIAAxkBAAIE...", 2)
+```
+
+---
+
+## Configuration
+
+### config.py
+
+```python
+# Bot Configuration
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"  # From @BotFather
+ADMIN_IDS = [123456789]  # Admin Telegram user IDs
+
+# Database Configuration
+DATABASE_FILE = "store.db"
+```
+
+### Environment Variables (Production)
+
+**Using python-dotenv**:
+
+```bash
+pip install python-dotenv
+```
+
+**Create .env file**:
+```
+BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
+ADMIN_IDS=123456789,987654321
+DATABASE_URL=postgresql://user:password@localhost/store
+```
+
+**Update config.py**:
+```python
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_IDS = [int(id) for id in os.getenv("ADMIN_IDS").split(",")]
+```
+
+---
+

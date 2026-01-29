@@ -397,58 +397,61 @@ def init_db():
             add_sample_data(session)
 
 
+
 def add_sample_data(session: Session):
     """Add sample categories, subcategories, products and variants"""
     # Create categories
     electronics = Category.create(session, "Electronics", "Electronic devices and gadgets")
     clothing = Category.create(session, "Clothing", "Fashion and apparel")
     food = Category.create(session, "Food & Beverages", "Food and drinks")
-    
+
     # Create subcategories
     phones_subcat = Subcategory.create(session, electronics.id, "Smartphones", "Mobile phones")
     laptops_subcat = Subcategory.create(session, electronics.id, "Laptops", "Portable computers")
-    
+
     mens_clothing = Subcategory.create(session, clothing.id, "Men's Clothing", "Clothing for men")
     womens_clothing = Subcategory.create(session, clothing.id, "Women's Clothing", "Clothing for women")
-    
+
     pizza_subcat = Subcategory.create(session, food.id, "Pizza", "Various pizzas")
     drinks_subcat = Subcategory.create(session, food.id, "Beverages", "Drinks and beverages")
-    
+
     # Create products
     iphone = Product.create(session, phones_subcat.id, "iPhone 15", "Latest iPhone model with advanced features")
     samsung = Product.create(session, phones_subcat.id, "Samsung Galaxy S24", "Premium Samsung smartphone")
-    
+
     macbook = Product.create(session, laptops_subcat.id, "MacBook Pro", "Apple's professional laptop")
     dell = Product.create(session, laptops_subcat.id, "Dell XPS", "Premium Dell laptop")
-    
+
     tshirt = Product.create(session, mens_clothing.id, "Cotton T-Shirt", "Comfortable cotton t-shirt")
     jeans = Product.create(session, mens_clothing.id, "Denim Jeans", "Classic blue jeans")
-    
+
     # Create variants
     # iPhone variants (storage sizes)
     ProductVariant.create(session, iphone.id, "128GB", 999.99, 10)
     ProductVariant.create(session, iphone.id, "256GB", 1099.99, 8)
     ProductVariant.create(session, iphone.id, "512GB", 1299.99, 5)
-    
+
     # Samsung variants
     ProductVariant.create(session, samsung.id, "256GB", 899.99, 12)
     ProductVariant.create(session, samsung.id, "512GB", 999.99, 7)
-    
+
     # MacBook variants
     ProductVariant.create(session, macbook.id, "13-inch M3", 1599.99, 5)
     ProductVariant.create(session, macbook.id, "14-inch M3 Pro", 1999.99, 3)
     ProductVariant.create(session, macbook.id, "16-inch M3 Max", 2499.99, 2)
-    
+
     # T-Shirt variants (sizes)
     ProductVariant.create(session, tshirt.id, "Small", 19.99, 50)
     ProductVariant.create(session, tshirt.id, "Medium", 19.99, 50)
     ProductVariant.create(session, tshirt.id, "Large", 19.99, 50)
     ProductVariant.create(session, tshirt.id, "X-Large", 19.99, 30)
-    
+
     # Jeans variants (sizes)
     ProductVariant.create(session, jeans.id, "30x32", 49.99, 20)
     ProductVariant.create(session, jeans.id, "32x32", 49.99, 25)
     ProductVariant.create(session, jeans.id, "34x32", 49.99, 20)
     ProductVariant.create(session, jeans.id, "36x34", 49.99, 15)
-    
+
     print("Sample data with subcategories and variants added successfully!")
+
+
