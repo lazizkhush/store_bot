@@ -8,7 +8,9 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 
-from database import User, Cart, get_db
+from database.models.user import User
+from database.models.cart import Cart
+from database.db_init import get_db
 from keyboards import get_cart_keyboard
 
 router = Router()

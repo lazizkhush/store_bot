@@ -14,7 +14,7 @@ class Category(Base):
     description: Mapped[Optional[str]] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    subcategories: Mapped[List["Subcategory"]] = relationship(back_populates="category", cascade="all, delete-orphan")
+    products: Mapped[List["Product"]] = relationship(back_populates="category", cascade="all, delete-orphan")
 
     @staticmethod
     def get_all(session: Session) -> List["Category"]:

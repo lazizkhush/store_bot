@@ -8,7 +8,10 @@ from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery
 
 from config import ADMIN_IDS, BOT_TOKEN
-from database import Order, OrderItem, Product
+from database.models.order import Order
+from database.models.order_item import OrderItem
+from database.models.product import Product
+
 
 router = Router()
 bot = Bot(token=BOT_TOKEN)

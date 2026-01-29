@@ -5,8 +5,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from contextlib import contextmanager
 from config import DATABASE_FILE
-from database.modules.base import Base
-from database.modules import __all_models__  # noqa: F401
+from database.models.base import Base
+from database.models import __all_models__  # noqa: F401
 
 DATABASE_URL = f"sqlite:///{DATABASE_FILE}"
 engine = create_engine(DATABASE_URL, echo=False)

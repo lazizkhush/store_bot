@@ -22,30 +22,9 @@ def get_categories_keyboard(categories) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def get_subcategories_keyboard(subcategories, category_id: int) -> InlineKeyboardMarkup:
-    """Create inline keyboard with subcategories"""
-    buttons = []
-    
-    for subcat in subcategories:
-        buttons.append([
-            InlineKeyboardButton(
-                text=f"📂 {subcat.name}",
-                callback_data=f"subcategory_{subcat.id}"
-            )
-        ])
-    
-    # Add back button
-    buttons.append([
-        InlineKeyboardButton(
-            text="⬅️ Back to Categories",
-            callback_data="back_to_categories"
-        )
-    ])
-    
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def get_products_keyboard(products, subcategory_id: int) -> InlineKeyboardMarkup:
+def get_products_keyboard(products, category_id: int) -> InlineKeyboardMarkup:
     """Create inline keyboard with products"""
     buttons = []
     
@@ -60,8 +39,8 @@ def get_products_keyboard(products, subcategory_id: int) -> InlineKeyboardMarkup
     # Add back button
     buttons.append([
         InlineKeyboardButton(
-            text="⬅️ Back to Subcategories",
-            callback_data=f"back_to_subcategories_{subcategory_id}"
+            text="⬅️ Back to Categories",
+            callback_data="back_to_categories"
         )
     ])
     

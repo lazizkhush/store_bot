@@ -6,7 +6,7 @@ This script helps admins add products with images to the store.
 Run this script to add your products interactively.
 """
 
-from database import (Category, Subcategory, Product, ProductVariant, 
+from database import (Category, Product, ProductVariant, 
                       ProductImage, init_db, get_db)
 
 
@@ -20,14 +20,7 @@ def list_categories():
         return categories
 
 
-def list_subcategories(category_id):
-    """List subcategories for a category"""
-    with get_db() as session:
-        subcategories = Subcategory.get_by_category(session, category_id)
-        print(f"\n=== Subcategories ===")
-        for subcat in subcategories:
-            print(f"{subcat.id}. {subcat.name}")
-        return subcategories
+
 
 
 def add_category():
@@ -42,19 +35,7 @@ def add_category():
         return category.id
 
 
-def add_subcategory():
-    """Add a new subcategory"""
-    list_categories()
-    category_id = int(input("\nSelect category ID: "))
-    
-    print("\n=== Add Subcategory ===")
-    name = input("Subcategory name: ")
-    description = input("Description: ")
-    
-    with get_db() as session:
-        subcategory = Subcategory.create(session, category_id, name, description)
-        print(f"✅ Subcategory created with ID: {subcategory.id}")
-        return subcategory.id
+
 
 
 def add_product():
@@ -62,15 +43,12 @@ def add_product():
     list_categories()
     category_id = int(input("\nSelect category ID: "))
     
-    subcategories = list_subcategories(category_id)
-    subcategory_id = int(input("\nSelect subcategory ID: "))
-    
     print("\n=== Add Product ===")
     name = input("Product name: ")
     description = input("Description: ")
     
     with get_db() as session:
-        product = Product.create(session, subcategory_id, name, description)
+        product = Product.create(session, category_id, name, description)
         print(f"✅ Product created with ID: {product.id}")
         
         # Add variants
