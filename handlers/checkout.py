@@ -9,7 +9,11 @@ from aiogram.types import CallbackQuery, Message, ReplyKeyboardMarkup, KeyboardB
 from aiogram.fsm.context import FSMContext
 
 from config import ADMIN_IDS, BOT_TOKEN
-from database import User, Cart, Order, OrderItem, Product
+from database.models.user import User
+from database.models.cart import Cart
+from database.models.order import Order
+from database.models.order_item import OrderItem
+from database.models.product import Product
 from keyboards import get_admin_order_keyboard
 from states import OrderStates
 

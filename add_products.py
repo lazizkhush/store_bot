@@ -102,31 +102,25 @@ def add_images_to_product():
 def main_menu():
     """Main menu for admin tools"""
     init_db()
-    
     while True:
         print("\n" + "="*50)
         print("STORE ADMIN TOOLS")
         print("="*50)
         print("1. Add Category")
-        print("2. Add Subcategory")
-        print("3. Add Product (with variants)")
-        print("4. Add Images to Product")
-        print("5. List all categories")
-        print("6. Exit")
-        
+        print("2. Add Product (with variants)")
+        print("3. Add Images to Product")
+        print("4. List all categories")
+        print("5. Exit")
         choice = input("\nSelect option: ")
-        
         if choice == "1":
             add_category()
         elif choice == "2":
-            add_subcategory()
-        elif choice == "3":
             add_product()
-        elif choice == "4":
+        elif choice == "3":
             add_images_to_product()
-        elif choice == "5":
+        elif choice == "4":
             list_categories()
-        elif choice == "6":
+        elif choice == "5":
             print("Goodbye!")
             break
         else:
@@ -168,29 +162,22 @@ def quick_example():
     Quick example of adding a complete product programmatically
     """
     init_db()
-    
     with get_db() as session:
-        # Assuming you already have categories and subcategories from sample data
-        # Let's add a new product to the Smartphones subcategory (ID: 1)
-        
-        # Create product
+        # Assuming you already have categories from sample data
+        # Let's add a new product to the first category (ID: 1)
         product = Product.create(
             session,
-            subcategory_id=1,  # Smartphones
+            category_id=1,  # Example category
             name="Google Pixel 8",
             description="Latest Google Pixel with AI features"
         )
-        
-        # Add variants
         variants_data = [
             ("128GB - Black", 699.99, 15),
             ("256GB - Black", 799.99, 10),
             ("256GB - White", 799.99, 8),
         ]
-        
         for variant_name, price, stock in variants_data:
             ProductVariant.create(session, product.id, variant_name, price, stock)
-        
         print(f"✅ Product 'Google Pixel 8' created with ID: {product.id}")
         print("✅ 3 variants added")
         print("\nTo add images, send photos to your bot and get their file_ids,")

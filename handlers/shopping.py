@@ -8,11 +8,22 @@ from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InputMediaPhoto
 from aiogram.fsm.context import FSMContext
 
-from database import (User, Category, Subcategory, Product, ProductVariant, 
-                      ProductImage, Cart, get_db)
-from keyboards import (get_categories_keyboard, get_subcategories_keyboard, 
+from database.models.category import Category
+from database.models.product import Product
+from database.models.product_image import ProductImage
+from database.models.product_variant import ProductVariant
+from database.models.user import User
+from database.models.cart import Cart
+from database.init_db import get_db
+from keyboards import (get_categories_keyboard,
                        get_products_keyboard, get_product_variants_keyboard,
                        get_variant_confirmation_keyboard)
+from keyboards import (
+    get_categories_keyboard,
+    get_products_keyboard,
+    get_product_variants_keyboard,
+    get_variant_confirmation_keyboard
+)
 from states import OrderStates
 
 router = Router()
@@ -41,52 +52,25 @@ async def cmd_order(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("category_"))
 async def process_category_selection(callback: CallbackQuery, state: FSMContext):
-    """Handle category selection - show subcategories"""
+    """Handle category selection - show products in category"""
     category_id = int(callback.data.split("_")[1])
-    
     with get_db() as session:
-        subcategories = Subcategory.get_by_category(session, category_id)
-        
-        if not subcategories:
-            await callback.answer("No subcategories in this category", show_alert=True)
+        products = Product.get_by_category(session, category_id)
+        if not products:
+            await callback.answer("No products in this category", show_alert=True)
             return
-        
         category = Category.get_by_id(session, category_id)
-        keyboard = get_subcategories_keyboard(subcategories, category_id)
-        
+        keyboard = get_products_keyboard(products, category_id)
         await callback.message.edit_text(
-            f"📂 Subcategories in {category.name}:",
+            f"📦 Products in {category.name}:",
             reply_markup=keyboard
         )
         await state.update_data(current_category=category_id)
-        await state.set_state(OrderStates.browsing_subcategories)
-    
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("subcategory_"))
-async def process_subcategory_selection(callback: CallbackQuery, state: FSMContext):
-    """Handle subcategory selection - show products"""
-    subcategory_id = int(callback.data.split("_")[1])
-    
-    with get_db() as session:
-        products = Product.get_by_subcategory(session, subcategory_id)
-        
-        if not products:
-            await callback.answer("No products in this subcategory", show_alert=True)
-            return
-        
-        subcategory = Subcategory.get_by_id(session, subcategory_id)
-        keyboard = get_products_keyboard(products, subcategory_id)
-        
-        await callback.message.edit_text(
-            f"📦 Products in {subcategory.name}:",
-            reply_markup=keyboard
-        )
-        await state.update_data(current_subcategory=subcategory_id)
         await state.set_state(OrderStates.browsing_products)
-    
     await callback.answer()
+
+
+
 
 
 @router.callback_query(F.data.startswith("product_"))
@@ -298,62 +282,32 @@ async def back_to_categories(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("back_to_subcategories_"))
-async def back_to_subcategories(callback: CallbackQuery, state: FSMContext):
-    """Go back to subcategories"""
-    subcategory_id = int(callback.data.split("_")[-1])
-    
-    with get_db() as session:
-        subcategory = Subcategory.get_by_id(session, subcategory_id)
-        subcategories = Subcategory.get_by_category(session, subcategory.category_id)
-        keyboard = get_subcategories_keyboard(subcategories, subcategory.category_id)
-        
-        category = Category.get_by_id(session, subcategory.category_id)
-        
-        # Delete message if it has a photo
-        try:
-            await callback.message.delete()
-            await callback.message.answer(
-                f"📂 Subcategories in {category.name}:",
-                reply_markup=keyboard
-            )
-        except:
-            await callback.message.edit_text(
-                f"📂 Subcategories in {category.name}:",
-                reply_markup=keyboard
-            )
-        
-        await state.set_state(OrderStates.browsing_subcategories)
-    
-    await callback.answer()
+
 
 
 @router.callback_query(F.data.startswith("back_to_products_"))
 async def back_to_products(callback: CallbackQuery, state: FSMContext):
-    """Go back to products list"""
+    """Go back to products list in the current category"""
     product_id = int(callback.data.split("_")[-1])
-    
     with get_db() as session:
         product = Product.get_by_id(session, product_id)
-        products = Product.get_by_subcategory(session, product.subcategory_id)
-        subcategory = Subcategory.get_by_id(session, product.subcategory_id)
-        keyboard = get_products_keyboard(products, product.subcategory_id)
-        
+        category_id = product.category_id
+        products = Product.get_by_category(session, category_id)
+        category = Category.get_by_id(session, category_id)
+        keyboard = get_products_keyboard(products, category_id)
         # Delete message if it has a photo
         try:
             await callback.message.delete()
             await callback.message.answer(
-                f"📦 Products in {subcategory.name}:",
+                f"📦 Products in {category.name}:",
                 reply_markup=keyboard
             )
         except:
             await callback.message.edit_text(
-                f"📦 Products in {subcategory.name}:",
+                f"📦 Products in {category.name}:",
                 reply_markup=keyboard
             )
-        
         await state.set_state(OrderStates.browsing_products)
-    
     await callback.answer()
 
 

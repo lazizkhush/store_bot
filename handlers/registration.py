@@ -7,7 +7,8 @@ from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
-from database import User, get_db
+from database.init_db import get_db
+from database.models.user import User
 from states import OrderStates
 
 router = Router()

@@ -10,7 +10,7 @@ from aiogram.fsm.context import FSMContext
 
 from database.models.user import User
 from database.models.cart import Cart
-from database.db_init import get_db
+from database.init_db import get_db
 from keyboards import get_cart_keyboard
 
 router = Router()

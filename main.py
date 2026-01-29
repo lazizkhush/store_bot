@@ -10,7 +10,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand
 
 from config import BOT_TOKEN
-from database import init_db
+from database.init_db import init_db
 from handlers import registration, shopping, cart, checkout, admin
 
 # Configure logging
