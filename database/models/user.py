@@ -7,7 +7,7 @@ from sqlalchemy import BigInteger, String, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship, Session
 from .base import Base
 
-from .order import Order
+## Removed direct import to avoid circular import
 from .cart import Cart
 
 class User(Base):

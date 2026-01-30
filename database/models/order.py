@@ -6,8 +6,7 @@ from typing import List, Optional
 from sqlalchemy import Float, String, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship, Session
 from .base import Base
-from .order_item import OrderItem
-from .user import User
+## Removed direct imports to avoid circular import
 
 class Order(Base):
     __tablename__ = "orders"

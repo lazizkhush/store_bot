@@ -6,8 +6,7 @@ from typing import List, Optional
 from sqlalchemy import Integer, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship, Session
 from .base import Base
-from product_variant import ProductVariant
-from user import User
+
 
 class Cart(Base):
     __tablename__ = "cart"

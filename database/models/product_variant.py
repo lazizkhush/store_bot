@@ -6,9 +6,6 @@ from typing import List, Optional
 from sqlalchemy import String, Float, Integer, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship, Session
 from .base import Base
-from .cart import Cart
-from .order_item import OrderItem
-from .product import Product
 
 class ProductVariant(Base):
     __tablename__ = "product_variants"

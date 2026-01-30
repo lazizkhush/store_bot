@@ -14,6 +14,7 @@ from database.models.cart import Cart
 from database.models.order import Order
 from database.models.order_item import OrderItem
 from database.models.product import Product
+from database.init_db import get_db
 from keyboards import get_admin_order_keyboard
 from states import OrderStates
 
@@ -24,64 +25,65 @@ bot = Bot(token=BOT_TOKEN)
 @router.callback_query(F.data == "checkout")
 async def process_checkout(callback: CallbackQuery, state: FSMContext):
     """Start checkout process"""
-    user = User.get_by_telegram_id(callback.from_user.id)
-    cart_items = Cart.get_user_cart(user['id'])
-    
-    if not cart_items:
-        await callback.answer("Your cart is empty!", show_alert=True)
-        return
-    
-    await callback.message.edit_text(
-        "📍 Please share your delivery location:",
-        reply_markup=None
-    )
-    
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="📍 Share Location", request_location=True)]],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-    
-    await callback.message.answer(
-        "Click the button below to share your location:",
-        reply_markup=keyboard
-    )
-    
-    await state.set_state(OrderStates.waiting_for_location)
-    await callback.answer()
+    with get_db() as session:
+        user = User.get_by_telegram_id(session, callback.from_user.id)
+        cart_items = Cart.get_user_cart(session, user.id)
+        
+        if not cart_items:
+            await callback.answer("Your cart is empty!", show_alert=True)
+            return
+        
+        await callback.message.edit_text(
+            "📍 Please share your delivery location:",
+            reply_markup=None
+        )
+        
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="📍 Share Location", request_location=True)]],
+            resize_keyboard=True,
+            one_time_keyboard=True
+        )
+        
+        await callback.message.answer(
+            "Click the button below to share your location:",
+            reply_markup=keyboard
+        )
+        
+        await state.set_state(OrderStates.waiting_for_location)
+        await callback.answer()
 
 
 @router.message(OrderStates.waiting_for_location, F.location)
 async def process_location(message: Message, state: FSMContext):
     """Process location and create order"""
     location = message.location
-    
-    user = User.get_by_telegram_id(message.from_user.id)
-    cart_items = Cart.get_user_cart(user['id'])
-    
+    with get_db() as session:
+        user = User.get_by_telegram_id(session, message.from_user.id)
+        cart_items = Cart.get_user_cart(session, user.id)
+
     if not cart_items:
         await message.answer("Your cart is empty!", reply_markup=ReplyKeyboardRemove())
         await state.clear()
         return
     
     # Calculate total
-    total = sum(item['price'] * item['quantity'] for item in cart_items)
+    total = sum(item.price * item.quantity for item in cart_items)
     
     # Create order
-    order_id = Order.create(user['id'], total, location.latitude, location.longitude)
+    order_id = Order.create(user.id, total, location.latitude, location.longitude)
     
     # Create order items and update stock
     for cart_item in cart_items:
         OrderItem.create(
             order_id,
-            cart_item['product_id'],
-            cart_item['quantity'],
-            cart_item['price']
+            cart_item.product_id,
+            cart_item.quantity,
+            cart_item.price
         )
-        Product.update_stock(cart_item['product_id'], -cart_item['quantity'])
+        Product.update_stock(cart_item.product_id, -cart_item.quantity)
     
     # Clear cart
-    Cart.clear_cart(user['id'])
+    Cart.clear_cart(user.id)
     
     # Notify user
     await message.answer(
@@ -103,7 +105,7 @@ async def process_location(message: Message, state: FSMContext):
     
     order_items = OrderItem.get_by_order(order_id)
     for item in order_items:
-        order_text += f"• {item['name']} x{item['quantity']} - ${item['price'] * item['quantity']:.2f}\n"
+        order_text += f"• {item.name} x{item.quantity} - ${item.price * item.quantity:.2f}\n"
     
     keyboard = get_admin_order_keyboard(order_id)
     

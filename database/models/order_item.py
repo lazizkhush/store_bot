@@ -5,7 +5,7 @@ from sqlalchemy import Integer, Float, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship, Session
 from .base import Base
 from typing import List
-from .order import Order
+## Removed direct import to avoid circular import
 from .product_variant import ProductVariant
 
 class OrderItem(Base):
