@@ -1,59 +1,65 @@
-"""
-Main entry point for Telegram Store Bot
-File: main.py
-"""
-
 import asyncio
 import logging
+import sys
 from aiogram import Bot, Dispatcher
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import BotCommand
+from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 
 from config import BOT_TOKEN
-from database.init_db import init_db
-from handlers import registration, shopping, cart, checkout, admin
+from database import init_db
+from middlewares.database import DatabaseMiddleware
+
+# Import handlers
+from handlers import registration, catalog, cart, checkout, admin, orders
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
 )
-
-# Initialize bot and dispatcher
-bot = Bot(token=BOT_TOKEN)
-storage = MemoryStorage()
-dp = Dispatcher(storage=storage)
-
-async def set_commands(bot: Bot):
-    commands = [
-        BotCommand(command="start", description="Botni ishga tushurish"),
-        BotCommand(command="order", description="Buyurtma qilish"),
-        BotCommand(command="cart", description="Savatni Ko'rish"),
-        BotCommand(command="help", description="Yordam")
-    ]
-    await bot.set_my_commands(commands)
+logger = logging.getLogger(__name__)
 
 
 async def main():
-    """Start the bot"""
-    # Initialize database
-    init_db()
-    logging.info("Database initialized")
+    """Main bot function"""
     
-    await set_commands(bot)
-    # Register all handlers
+    # Initialize database
+    logger.info("Initializing database...")
+    init_db()
+    
+    # Initialize bot and dispatcher
+    bot = Bot(
+        token=BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+    )
+    dp = Dispatcher()
+    
+    # Register middleware
+    dp.message.middleware(DatabaseMiddleware())
+    dp.callback_query.middleware(DatabaseMiddleware())
+    
+    # Register routers
     dp.include_router(registration.router)
-    dp.include_router(shopping.router)
+    dp.include_router(catalog.router)
     dp.include_router(cart.router)
     dp.include_router(checkout.router)
+    dp.include_router(orders.router)
     dp.include_router(admin.router)
     
-    logging.info("Starting bot...")
-    
     # Start polling
-    await dp.start_polling(bot)
+    logger.info("Starting bot...")
+    try:
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    finally:
+        await bot.session.close()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
-
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        sys.exit(1)

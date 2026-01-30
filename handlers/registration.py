@@ -1,64 +1,75 @@
-"""
-User registration handlers
-File: handlers/registration.py
-"""
-
 from aiogram import Router, F
-from aiogram.filters import Command
 from aiogram.types import Message
+from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
-from database.init_db import get_db
-from database.models.user import User
-from states import OrderStates
+from aiogram.fsm.state import State, StatesGroup
+
+from database import get_session, UserRepository
+from utils import validate_phone_number, get_main_menu_keyboard
+from config import Messages
 
 router = Router()
 
-@router.message(Command("start"))
+
+class RegistrationStates(StatesGroup):
+    """States for registration flow"""
+    waiting_phone = State()
+
+
+@router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
-    await state.clear()
-    with get_db() as session:
-        user = User.get_by_telegram_id(session, message.from_user.id)
+    """Handle /start command"""
+    session = get_session()
+    try:
+        # Check if user already exists
+        user = UserRepository.get_by_telegram_id(session, message.from_user.id)
+        
         if user:
-            await message.answer("Welcome back! You are already registered.\nSend /order to start shopping.")
-            return
-    await message.answer(
-        "Welcome to the E-Commerce Store Bot!\nPlease enter your phone number (e.g. +1234567890):"
-    )
-    await state.set_state(OrderStates.waiting_for_phone)
-
-
-@router.message(OrderStates.waiting_for_phone)
-async def process_phone(message: Message, state: FSMContext):
-    phone = message.text.strip()
-    # Basic validation: starts with + and is digits
-    if not (phone.startswith("+") and phone[1:].isdigit() and 8 <= len(phone) <= 20):
-        await message.answer("Invalid phone number. Please enter in format +1234567890:")
-        return
-    with get_db() as session:
-        user = User.get_by_telegram_id(session, message.from_user.id)
-        if not user:
-            user = User.create(
-                session,
-                telegram_id=message.from_user.id,
-                phone_number=phone,
-                first_name=message.from_user.first_name or "",
-                last_name=message.from_user.last_name or "",
-                username=message.from_user.username or ""
+            # User already registered
+            await message.answer(
+                f"Welcome back, {message.from_user.first_name}! 👋",
+                reply_markup=get_main_menu_keyboard()
             )
         else:
-            user.phone_number = phone
-        session.commit()
-    await message.answer("✅ Registration complete!\nSend /order to start shopping.")
-    await state.clear()
+            # New user - request phone number
+            await message.answer(Messages.WELCOME)
+            await state.set_state(RegistrationStates.waiting_phone)
+    finally:
+        session.close()
 
 
-@router.message(Command("help"))
-async def cmd_help(message: Message, state: FSMContext):
-    await message.answer(
-        "This is a demo e-commerce bot.\n"
-        "Commands:\n"
-        "/start - Register or login\n"
-        "/order - Start shopping\n"
-        "/cart - View your cart\n"
-        "/help - Show this help message"
-    )
+@router.message(RegistrationStates.waiting_phone)
+async def process_phone_number(message: Message, state: FSMContext):
+    """Process phone number sent by user"""
+    
+    # Validate phone number
+    phone = validate_phone_number(message.text)
+    
+    if not phone:
+        await message.answer(Messages.INVALID_PHONE)
+        return
+    
+    # Save user to database
+    session = get_session()
+    try:
+        user = UserRepository.create(
+            session=session,
+            telegram_id=message.from_user.id,
+            phone_number=phone,
+            username=message.from_user.username,
+            first_name=message.from_user.first_name,
+            last_name=message.from_user.last_name
+        )
+        
+        await message.answer(
+            Messages.PHONE_REGISTERED,
+            reply_markup=get_main_menu_keyboard()
+        )
+        
+        # Clear state
+        await state.clear()
+        
+    except Exception as e:
+        await message.answer(f"❌ Error registering user: {str(e)}")
+    finally:
+        session.close()

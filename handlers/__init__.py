@@ -1,12 +1,3 @@
-"""
-Handlers package - imports all handler modules
-File: handlers/__init__.py
-"""
+from handlers import registration, catalog, cart, checkout, admin, orders
 
-from . import registration
-from . import shopping
-from . import cart
-from . import checkout
-from . import admin
-
-__all__ = ['registration', 'shopping', 'cart', 'checkout', 'admin']
+__all__ = ['registration', 'catalog', 'cart', 'checkout', 'admin', 'orders']
